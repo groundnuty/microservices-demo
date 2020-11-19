@@ -333,7 +333,8 @@ func (fe *frontendServer) placeOrderHandler(w http.ResponseWriter, r *http.Reque
 
 	totalPaid := *order.GetOrder().GetShippingCost()
 	for _, v := range order.GetOrder().GetItems() {
-		totalPaid = money.Must(money.Sum(totalPaid, *v.GetCost()))
+		multPrice := money.MultiplySlow(*v.GetCost(), uint32(v.GetItem().GetQuantity()))
+		totalPaid = money.Must(money.Sum(totalPaid, multPrice))
 	}
 
 	currencies, err := fe.getCurrencies(r.Context())
@@ -407,12 +408,15 @@ func renderHTTPError(log logrus.FieldLogger, r *http.Request, w http.ResponseWri
 	errMsg := fmt.Sprintf("%+v", err)
 
 	w.WriteHeader(code)
-	templates.ExecuteTemplate(w, "error", map[string]interface{}{
+	if templateErr := templates.ExecuteTemplate(w, "error", map[string]interface{}{
 		"session_id":  sessionID(r),
 		"request_id":  r.Context().Value(ctxKeyRequestID{}),
 		"error":       errMsg,
 		"status_code": code,
-		"status":      http.StatusText(code)})
+		"status":      http.StatusText(code),
+	}); templateErr != nil {
+		log.Println(templateErr)
+	}
 }
 
 func currentCurrency(r *http.Request) string {
